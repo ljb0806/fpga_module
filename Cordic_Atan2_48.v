@@ -1,23 +1,40 @@
-`timescale 1ns / 1ps
+// =============================================================================
+// 模块名称 : Cordic_Atan2
+// 文件名称 : Cordic_Atan2_48.v
+// 作者     : binbin
+// 功能描述 : 可配置输入和模长位宽的高分辨率 CORDIC 反正切/模长计算器。
+//            内部使用 48 位圆周相位，输出 atan2(y,x) 与 sqrt(x^2+y^2)。
+//
+// 实现思路 :
+//   1. 将 DIN_WIDTH 位输入符号扩展并左移到带保护位的内部坐标格式。
+//   2. 当 x<0 时把向量旋转 180°，使其进入 CORDIC 向量模式收敛范围。
+//   3. 进行 47 次向量模式微旋转，把 y 逐级逼近 0 并在 z 中累积相位。
+//   4. 对迭代后的 x 乘以 1/K 近似值，恢复与输入同量纲的向量模长。
+//   5. 使用额外寄存器对齐相位和模长，并对零向量及模长溢出单独处理。
+//
+// 参数说明 :
+//   DIN_WIDTH   = 16 : i_x/i_y 输入位宽，不得大于 48。
+//   PHASE_WIDTH = 48 : 相位输出位宽，范围 2～48；变窄时保留内部相位高位。
+//   MAG_WIDTH   = 16 : 模长输出位宽，不得大于 2*DIN_WIDTH-1。
+//
+// 端口说明 :
+//   i_clk       : 工作时钟，上升沿采样。
+//   i_rst_n     : 异步复位，低有效。
+//   i_x, i_y    : DIN_WIDTH 位有符号直角坐标输入。
+//   o_phase     : PHASE_WIDTH 位有符号圆周相位输出。
+//   o_phase_mag : MAG_WIDTH 位有符号端口承载的非负模长，溢出时正饱和。
+//
+// 定点与时序 :
+//   - 内部 48 位相位以 2^48 个码表示 2π；π/2 对应 48'h4000_0000_0000。
+//   - 坐标预处理后接 47 级迭代，再经过模长补偿和输出对齐寄存器。
+//   - 模块可每拍接收一个输入；有效信号需在外部按完整流水深度延迟。
+//
+// 使用注意 :
+//   - 零向量明确输出零相位和零模长。
+//   - 本文件与 Cordic_Atan2_24.v 模块名相同，应二选一或重命名。
+// =============================================================================
 
-// =============================================================================
-// Vectoring-mode CORDIC atan2 and magnitude generator.
-//
-// Default interface:
-//   i_x/i_y       : signed 16-bit Cartesian inputs
-//   o_phase       : signed 48-bit circular phase
-//   o_phase_mag   : unsigned-magnitude value carried by a signed 16-bit port
-//
-// Phase coding is identical to Cordic.v:
-//   0                       = 0
-//   48'h4000_0000_0000     = +pi/2
-//   48'h8000_0000_0000     = -pi (the same point as +pi)
-//   48'hC000_0000_0000     = -pi/2
-//
-// PHASE_WIDTH may be set from 2 to 48. Internally the phase is always
-// calculated at 48-bit resolution; a narrower output keeps its upper bits.
-// DIN_WIDTH must not exceed 48. MAG_WIDTH must not exceed 2*DIN_WIDTH-1.
-// =============================================================================
+`timescale 1ns / 1ps
 
 module Cordic_Atan2 #(
     parameter integer DIN_WIDTH   = 16,
