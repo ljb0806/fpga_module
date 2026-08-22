@@ -1,21 +1,34 @@
 // =============================================================================
-// module   : Cordic
-// function : 48-bit phase CORDIC sine/cosine generator
+// 模块名称 : Cordic
+// 文件名称 : Cordic_48.v
+// 作者     : binbin
+// 功能描述 : 48 位相位 CORDIC 正弦/余弦计算器。内部保持 48 位精度，输出位宽
+//            可配置，可用于高分辨率 DDS、正交本振和调制波形生成。
 //
-// Phase format:
-//   48-bit signed circular phase. 2*pi corresponds to 2^48 phase codes:
-//     48'h0000_0000_0000 =  0
-//     48'h4000_0000_0000 = +pi/2
-//     48'h8000_0000_0000 = -pi (the same point as +pi)
-//     48'hC000_0000_0000 = -pi/2
+// 实现思路 :
+//   1. 将全圆周相位按象限映射到 CORDIC 收敛区间 [-π/2, π/2]。
+//   2. 以带幅度余量的 CORDIC_GAIN 作为 x 初值，补偿迭代增益并防止 +1 回绕。
+//   3. 使用 47 次旋转模式微旋转逐级把残余相位 z 逼近 0。
+//   4. 从 48 位内部 x/y 数据的高位截取 DOUT_WIDTH 位作为 cos/sin 输出。
 //
-// Output format:
-//   Signed Q1.(DOUT_WIDTH-1). The internal x/y datapath is always 48 bits;
-//   only the final output is reduced to DOUT_WIDTH bits.
+// 参数说明 :
+//   DOUT_WIDTH = 16 : 正弦、余弦输出位宽，合法范围为 2～48。
 //
-// Pipeline:
-//   One input can be accepted every clock. The quadrant mapping occupies the
-//   first register and is followed by 47 effective CORDIC rotations.
+// 端口说明 :
+//   i_clk    : 工作时钟，上升沿采样。
+//   i_rst_n  : 异步复位，低有效。
+//   i_phase  : 48 位有符号圆周相位输入。
+//   o_cos    : DOUT_WIDTH 位有符号余弦输出。
+//   o_sin    : DOUT_WIDTH 位有符号正弦输出。
+//
+// 定点与时序 :
+//   - 2π 对应 2^48 个相位码；0、+π/2、-π、-π/2 分别对应
+//     48'h0000_0000_0000、4000_0000_0000、8000_0000_0000、C000_0000_0000。
+//   - 输出采用 Q1.(DOUT_WIDTH-1) 格式。
+//   - 象限预处理后接 47 级有效迭代，可每拍接收一个新相位。
+//
+// 使用注意 :
+//   本文件与 Cordic_24.v 的模块名相同，同一编译库中应二选一或重命名。
 // =============================================================================
 
 module Cordic #(
